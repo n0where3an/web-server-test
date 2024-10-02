@@ -1,0 +1,13 @@
+{
+"server_port":8000,
+
+"web_mysql_host":null,
+"web_mysql_port":3306,
+"web_mysql_username":null,
+"web_mysql_password":null,
+"web_mysql_dbname":null,
+
+"web_redis_host":null,
+"web_redis_port":6379,
+"web_redis_db":-1
+}
