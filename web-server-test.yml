@@ -120,4 +120,4 @@ spec:
     - name: app-listener
       protocol: TCP
       port : 8000
-      targetPort : 80
+      targetPort : 8000

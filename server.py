@@ -7,8 +7,8 @@
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import socket
-import sys 
-import os 
+import sys
+import os
 import time
 import json
 import mysql.connector
@@ -54,7 +54,7 @@ def RedisCheck():
     if not lb_result:
         gb_redisconnection = False
         print("Redis write unsuccess")
-        return gb_redisconnection 
+        return gb_redisconnection
     else:
         print("Redis write success")
 
@@ -62,13 +62,13 @@ def RedisCheck():
     value = go_rs_client.get(ls_keyname)
     print(value)
 
-    if value.decode() == string_arg : 
+    if value.decode() == string_arg :
         gb_redisconnection = True
     else:
         gb_redisconnection = False
     print(value.decode())
     print(str(gb_redisconnection))
-    return gb_redisconnection 
+    return gb_redisconnection
 
 def MysqlCheck(fb_init=False):
     global gb_mysqlcheck
@@ -92,7 +92,7 @@ def MysqlCheck(fb_init=False):
 
     ls_fquery = "select count(*) from web_server_test;"
     if fb_init :
-        ls_fquery = "insert web_server_test (port) values ("+str(gi_server_port)+");"    
+        ls_fquery = "insert web_server_test (port) values ("+str(gi_server_port)+");"
 
     print (ls_fquery)
     try:
@@ -128,7 +128,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         l_smysql='"mysql_connection":null'
         if gb_mysqlcheck :
             l_smysql='{"mysql_connection":'+str(gb_mysqlconnection)
-            if  gb_mysqlconnection :   
+            if  gb_mysqlconnection :
                 li_retcode=503
         l_sredis='"redis_connection":null'
         if  gb_redischeck :
@@ -140,7 +140,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         ls_tmp='{"query_number":'+ str(gi_healtcheck_counter) +','+l_smysql+','+l_sredis+'}'
         gi_healtcheck_counter=gi_healtcheck_counter+1
-        self.wfile.write(ls_tmp.encode())     
+        self.wfile.write(ls_tmp.encode())
     elif self.path == '/readycheck':
         l_tmp=RedisCheck()
 #        print (str(l_tmp))
@@ -152,7 +152,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         l_smysql='"mysql_connection":null'
         if gb_mysqlcheck :
             l_smysql='{"mysql_connection":'+str(gb_mysqlconnection)
-            if  gb_mysqlconnection :   
+            if  gb_mysqlconnection :
                 li_retcode=503
         l_sredis='"redis_connection":null'
         if  gb_redischeck :
@@ -192,20 +192,41 @@ class MetricsHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
+        current_unix_time_millis = int(time.time() * 1000)
         # Возвращаем текстовые метрики
-        self.wfile.write(b'# HELP n0whereman_test_pod_param_int is test pod param int\n')
-        self.wfile.write(b'n0whereman_test_pod_param_int '+str(random.randint(1, 100)).encode() + b'\n')
-        self.wfile.write(b'# HELP n0whereman_test_pod_param_float is test pod param float\n')
-        self.wfile.write(b'n0whereman_test_pod_param_float '+str(random.uniform(-500,+500)).encode() + b'\n')
-        self.wfile.write(b'# HELP n0whereman_test_pod_redis_check is test pod redis_check\n')
-        self.wfile.write(b'n0whereman_test_pod_redis_check '+str(gb_redisconnection).encode() + b'\n')
-        self.wfile.write(b'# HELP n0whereman_test_pod_mysql_check is test pod mysql_check\n')
-        self.wfile.write(b'n0whereman_test_pod_mysql_check '+str(gb_mysqlconnection).encode() + b'\n')
-        self.wfile.write(b'# HELP n0whereman_test_pod_current_time is test pod current_time\n')
-        self.wfile.write(b'n0whereman_test_pod_current_time '+str(time.strftime("%X")).encode()+b'\n')
-        self.wfile.write(b'n0whereman_test_pod_metrics_counter '   +str(gi_metrics_counter   ).encode() + b'\n')
-        self.wfile.write(b'n0whereman_test_pod_healtcheck_counter '+str(gi_healtcheck_counter).encode() + b'\n')
-        self.wfile.write(b'n0whereman_test_pod_readycheck_counter '+str(gi_readycheck_counter).encode() + b'\n')
+        lsb_ending= b' ' + str(current_unix_time_millis).encode() + b'\n'
+        self.wfile.write(b'# HELP n0whereman_test_pod_param_int Test pod param int\n')
+        self.wfile.write(b'# TYPE n0whereman_test_pod_param_int gauge\n')
+        self.wfile.write(b'n0whereman_test_pod_param_int ' + str(random.randint(1, 100)).encode() + lsb_ending )
+
+        self.wfile.write(b'# HELP n0whereman_test_pod_param_float Test pod param float\n')
+        self.wfile.write(b'# TYPE n0whereman_test_pod_param_float gauge\n')
+        self.wfile.write(b'n0whereman_test_pod_param_float ' + str(random.uniform(-500, +500)).encode() + lsb_ending )
+
+        self.wfile.write(b'# HELP n0whereman_test_pod_redis_check Test pod Redis check (0 for false, 1 for true)\n')
+        self.wfile.write(b'# TYPE n0whereman_test_pod_redis_check gauge\n')
+        self.wfile.write(b'n0whereman_test_pod_redis_check ' + str(int(gb_redisconnection)).encode() + lsb_ending )
+
+        self.wfile.write(b'# HELP n0whereman_test_pod_mysql_check Test pod MySQL check (0 for false, 1 for true)\n')
+        self.wfile.write(b'# TYPE n0whereman_test_pod_mysql_check gauge\n')
+        self.wfile.write(b'n0whereman_test_pod_mysql_check ' + str(int(gb_mysqlconnection)).encode() + lsb_ending )
+
+        self.wfile.write(b'# HELP n0whereman_test_pod_current_time Test pod current time in Unix format\n')
+        self.wfile.write(b'# TYPE n0whereman_test_pod_current_time gauge\n')
+        self.wfile.write(b'n0whereman_test_pod_current_time ' + str(current_unix_time).encode() + lsb_ending )
+
+        self.wfile.write(b'# HELP n0whereman_test_pod_metrics_counter Total number of metrics processed by the pod\n')
+        self.wfile.write(b'# TYPE n0whereman_test_pod_metrics_counter counter\n')
+        self.wfile.write(b'n0whereman_test_pod_metrics_counter ' + str(gi_metrics_counter).encode() + lsb_ending )
+
+        self.wfile.write(b'# HELP n0whereman_test_pod_healtcheck_counter Total number of health checks performed by the pod\n')
+        self.wfile.write(b'# TYPE n0whereman_test_pod_healtcheck_counter counter\n')
+        self.wfile.write(b'n0whereman_test_pod_healtcheck_counter ' + str(gi_healtcheck_counter).encode() + lsb_ending )
+
+        self.wfile.write(b'# HELP n0whereman_test_pod_readycheck_counter Total number of ready checks performed by the pod\n')
+        self.wfile.write(b'# TYPE n0whereman_test_pod_readycheck_counter counter\n')
+        self.wfile.write(b'n0whereman_test_pod_readycheck_counter ' + str(gi_readycheck_counter).encode() + lsb_ending )
+
         gi_metrics_counter=gi_metrics_counter+1
     else:
         self.send_response(200)
@@ -251,15 +272,15 @@ if __name__ == '__main__':
     gb_configenv = True
 
     try:
-        server_port        = os.getenv("SERVER_PORT")       
-        web_mysql_host     = os.getenv("WEB_MYSQL_HOST")    
-        web_mysql_port     = os.getenv("WEB_MYSQL_PORT")    
+        server_port        = os.getenv("SERVER_PORT")
+        web_mysql_host     = os.getenv("WEB_MYSQL_HOST")
+        web_mysql_port     = os.getenv("WEB_MYSQL_PORT")
         web_mysql_username = os.getenv("WEB_MYSQL_USERNAME")
         web_mysql_password = os.getenv("WEB_MYSQL_PASSWORD")
-        web_mysql_dbname   = os.getenv("WEB_MYSQL_DBNAME")  
-        web_redis_host     = os.getenv("WEB_REDIS_HOST")    
-        web_redis_port     = os.getenv("WEB_REDIS_PORT")    
-        web_redis_db       = os.getenv("WEB_REDIS_DB")      
+        web_mysql_dbname   = os.getenv("WEB_MYSQL_DBNAME")
+        web_redis_host     = os.getenv("WEB_REDIS_HOST")
+        web_redis_port     = os.getenv("WEB_REDIS_PORT")
+        web_redis_db       = os.getenv("WEB_REDIS_DB")
     except Exception as err:
         print ("environment err"+str(err))
         gb_configenv = False
@@ -326,7 +347,7 @@ if __name__ == '__main__':
 
     thread1 = threading.Thread(target=run_main_server)
     thread2 = threading.Thread(target=run_metrics_server)
-    
+
     # Запускаем оба потока
     thread1.start()
     thread2.start()
