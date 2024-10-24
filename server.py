@@ -213,7 +213,7 @@ class MetricsHTTPRequestHandler(BaseHTTPRequestHandler):
 
         self.wfile.write(b'# HELP n0whereman_test_pod_current_time Test pod current time in Unix format\n')
         self.wfile.write(b'# TYPE n0whereman_test_pod_current_time gauge\n')
-        self.wfile.write(b'n0whereman_test_pod_current_time ' + str(current_unix_time).encode() + lsb_ending )
+        self.wfile.write(b'n0whereman_test_pod_current_time ' + str(current_unix_time_millis).encode() + lsb_ending )
 
         self.wfile.write(b'# HELP n0whereman_test_pod_metrics_counter Total number of metrics processed by the pod\n')
         self.wfile.write(b'# TYPE n0whereman_test_pod_metrics_counter counter\n')
