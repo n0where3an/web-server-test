@@ -6,7 +6,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: web-server-test
+  name: n0wm-ws-test
   labels:
     pod-security.kubernetes.io/enforce: restricted
 
@@ -14,8 +14,8 @@ metadata:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: web-server-test
-  namespace: web-server-test
+  name: n0wm-ws-test
+  namespace: n0wm-ws-test
   labels:
     env: test
     app: n0wm-test-application
@@ -104,7 +104,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: n0wm-test-autoscaling
-  namespace: web-server-test
+  namespace: n0wm-ws-test
   labels:
     env: test
     owner: MichaelYasko
@@ -113,7 +113,7 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: web-server-test
+    name: n0wm-ws-test
   minReplicas: 1
   maxReplicas: 3
   metrics:
@@ -135,7 +135,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: n0wm-test-deployment-autoscaling
-  namespace: web-server-test
+  namespace: n0wm-ws-test
   labels:
     env: test
     app: n0wm-test-autoscaling
