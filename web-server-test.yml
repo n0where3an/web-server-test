@@ -6,32 +6,21 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: n0wm-ws-test
+  name: web-server-test
   labels:
     pod-security.kubernetes.io/enforce: restricted
-#---
-#apiVersion: v1
-#kind: ResourceQuota
-#metadata:
-#  name: n0wm-test-resource-quota
-#  namespace: n0wm-ws-test  # Укажите целевой namespace
-#spec:
-#  hard:
-#    requests.cpu: "1"        # Максимум 1 CPU запрошено подами
-#    requests.memory: "30Mi"   # Максимум 1 GiB памяти запрошено подами
-#    limits.cpu: "1"          # Максимум 2 CPU может быть использовано
-#    limits.memory: "120Mi"     # Максимум 2 GiB памяти может быть использовано
+
 ---
-apiVersion : apps/v1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: n0wm-ws-test-deployment
-  namespace: n0wm-ws-test
+  name: web-server-test
+  namespace: web-server-test
   labels:
-    env : test
-    app : n0wm-test-application
-    tier : frontend
-    owner : MichaelYasko
+    env: test
+    app: n0wm-test-application
+    tier: frontend
+    owner: MichaelYasko
     project: n0wm-test-prj
 spec:
   selector:
@@ -40,18 +29,18 @@ spec:
   template:
     metadata:
       labels:
-        env : test
-        app : n0wm-test-application
-        owner : MichaelYasko
+        env: test
+        app: n0wm-test-application
+        owner: MichaelYasko
         project: n0wm-test-prj
         monitoring: "true"
     spec:
       containers:
       - name: n0wm-test-prj-web
-        image: n0where3an/testdocker:1.5
+        image: n0where3an/testdocker:1.6
         securityContext:
-          runAsUser: 1011
-          runAsGroup: 1011
+          runAsUser: 1009
+          runAsGroup: 1009
           runAsNonRoot: true
           allowPrivilegeEscalation: false
           capabilities:
@@ -98,30 +87,33 @@ spec:
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 5
-          successThreshold: 1
+          successThreshold: 2
           failureThreshold: 5
-        resources:
-          limits:
-            memory: "128Mi"
-            cpu: "50m"
-          requests:
-            memory: "64Mi"
-            cpu: "10m"
+        startupProbe:
+          httpGet:
+            path: /startupcheck
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 2
+          failureThreshold: 5
+
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name   : n0wm-test-autoscaling
-  namespace: n0wm-ws-test
+  name: n0wm-test-autoscaling
+  namespace: web-server-test
   labels:
-    env    : test
-    owner  : MichaelYasko
+    env: test
+    owner: MichaelYasko
     project: n0wm-test-prj
 spec:
   scaleTargetRef:
-    apiVersion: apps/v2
-    kind  : Deployment
-    name  : n0wm-ws-test-deployment
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web-server-test
   minReplicas: 1
   maxReplicas: 3
   metrics:
@@ -136,27 +128,27 @@ spec:
       name: memory
       target:
         type: Utilization
-        averageUtilization: 85
+        averageUtilization: 70
 
 ---
-apiVersion : v1
+apiVersion: v1
 kind: Service
 metadata:
   name: n0wm-test-deployment-autoscaling
-  namespace: n0wm-ws-test
+  namespace: web-server-test
   labels:
-    env   : test
-    app   : n0wm-test-autoscaling
-    owner : MichaelYasko
+    env: test
+    app: n0wm-test-autoscaling
+    owner: MichaelYasko
     project: n0wm-test-prj
 spec:
   type: LoadBalancer
   selector:
     project: n0wm-test-prj
-    env    : test
-    owner  : MichaelYasko
+    env: test
+    owner: MichaelYasko
   ports:
     - name: app-listener
       protocol: TCP
-      port : 8000
-      targetPort : 8000
+      port: 80
+      targetPort: 8000

@@ -5,6 +5,7 @@
 ### Author          : Michael Yasko
 ### Version history :
 
+from prometheus_client import start_http_server, Gauge, Counter, Histogram, generate_latest
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import socket
 import sys
@@ -34,6 +35,20 @@ gi_readycheck_counter=0
 
 go_rs_client={}
 go_ms_client={}
+
+#Метрики прометеус
+# Создаем гистограмму для метрик времени запроса
+REQUEST_TIME = Histogram ( 'n0whereman_http_server_requests_seconds', 'Duration of HTTP server request handling', ['method', 'endpoint', 'status', 'exception', 'outcome'] )
+# Кастомные метрики
+TEST_POD_PARAM_INT = Gauge('n0whereman_test_pod_param_int', 'Test pod param int')
+TEST_POD_PARAM_FLOAT = Gauge('n0whereman_test_pod_param_float', 'Test pod param float')
+TEST_POD_REDIS_CHECK = Gauge('n0whereman_test_pod_redis_check', 'Test pod Redis check (0 for false, 1 for true)')
+TEST_POD_MYSQL_CHECK = Gauge('n0whereman_test_pod_mysql_check', 'Test pod MySQL check (0 for false, 1 for true)')
+TEST_POD_CURRENT_TIME = Gauge('n0whereman_test_pod_current_time', 'Test pod current time in Unix format')
+METRICS_COUNTER = Counter('n0whereman_test_pod_metrics_counter', 'Total number of metrics processed by the pod')
+HEALTHCHECK_COUNTER = Counter('n0whereman_test_pod_healtcheck_counter', 'Total number of health checks performed by the pod')
+READYCHECK_COUNTER = Counter('n0whereman_test_pod_readycheck_counter', 'Total number of ready checks performed by the pod')
+STARTUPCHECK_COUNTER = Counter('n0whereman_test_pod_startupcheck_counter', 'Total number of startup checks performed by the pod')
 
 def RedisCheck():
     global gb_redischeck
@@ -119,124 +134,138 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     global gi_healtcheck_counter
     global gi_readycheck_counter
 
-    if self.path == '/healthcheck':
-        l_tmp=RedisCheck()
-#        print (str(l_tmp))
-        l_tmp=MysqlCheck()
-#        print (str(l_tmp))
-        li_retcode=200
-        l_smysql='"mysql_connection":null'
-        if gb_mysqlcheck :
-            l_smysql='{"mysql_connection":'+str(gb_mysqlconnection)
-            if  gb_mysqlconnection :
+    endpoint = self.path
+
+    # Дополнительные метки
+    exception = "None"
+    outcome = "SUCCESS"
+
+    match endpoint :
+        case '/startupcheck':
+            l_tmp=RedisCheck()
+    #        print (str(l_tmp))
+            l_tmp=MysqlCheck()
+    #        print (str(l_tmp))
+            li_retcode=200
+            if not gb_configenv and not gb_configfile :
                 li_retcode=503
-        l_sredis='"redis_connection":null'
-        if  gb_redischeck :
-            l_sredis='"redis_connection":'+str(gb_redisconnection)
-            if gb_redisconnection :
+            l_smysql='"mysql_connection":null'
+            if gb_mysqlcheck :
+                l_smysql='{"mysql_connection":'+str(gb_mysqlconnection)
+                if  gb_mysqlconnection :
+                    li_retcode=503
+            l_sredis='"redis_connection":null'
+            if  gb_redischeck :
+                l_sredis='"redis_connection":'+str(gb_redisconnection)
+                if gb_redisconnection :
+                    li_retcode=503
+            self.send_response(li_retcode)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            ls_tmp='{"query_number":'+ str(gi_readycheck_counter) +', "config_file":'+str(gb_configfile)+',"env_variables":'+str(gb_configenv)+','+l_smysql+','+l_sredis+'}'
+            STARTUPCHECK_COUNTER.inc()
+            self.wfile.write(ls_tmp.encode())
+        case '/readycheck':
+            l_tmp=RedisCheck()
+    #        print (str(l_tmp))
+            l_tmp=MysqlCheck()
+    #        print (str(l_tmp))
+            li_retcode=200
+            if not gb_configenv and not gb_configfile :
                 li_retcode=503
-        self.send_response(li_retcode)
-        self.send_header('Content-type', 'application/json')
-        self.end_headers()
-        ls_tmp='{"query_number":'+ str(gi_healtcheck_counter) +','+l_smysql+','+l_sredis+'}'
-        gi_healtcheck_counter=gi_healtcheck_counter+1
-        self.wfile.write(ls_tmp.encode())
-    elif self.path == '/readycheck':
-        l_tmp=RedisCheck()
-#        print (str(l_tmp))
-        l_tmp=MysqlCheck()
-#        print (str(l_tmp))
-        li_retcode=200
-        if not gb_configenv and not gb_configfile :
-            li_retcode=503
-        l_smysql='"mysql_connection":null'
-        if gb_mysqlcheck :
-            l_smysql='{"mysql_connection":'+str(gb_mysqlconnection)
-            if  gb_mysqlconnection :
-                li_retcode=503
-        l_sredis='"redis_connection":null'
-        if  gb_redischeck :
-            l_sredis='"redis_connection":'+str(gb_redisconnection)
-            if gb_redisconnection :
-                li_retcode=503
-        self.send_response(li_retcode)
-        self.send_header('Content-type', 'application/json')
-        self.end_headers()
-        ls_tmp='{"query_number":'+ str(gi_readycheck_counter) +', "config_file":'+str(gb_configfile)+',"env_variables":'+str(gb_configenv)+','+l_smysql+','+l_sredis+'}'
-        gi_readycheck_counter=gi_readycheck_counter+1
-        self.wfile.write(ls_tmp.encode())
-    else:
-        self.send_response(200)
-        self.send_header('Content-type','text/html')
-        self.end_headers()
-        self.wfile.write(b'<!doctype html><html><head><title>Test page</title><meta content="text/html; charset=utf-8" http-equiv="Content-Type"></head><body> ' + socket.gethostname().encode() + b'<br><br>')
-        self.wfile.write(b'<b>Hello from hostname:</b> ' + socket.gethostname().encode() + b'<br><br>')
-        self.wfile.write(b'<b>Interval: </b> ' + str(interval).encode() + b'<br><br>')
-        self.wfile.write(b'<b>Desired count of print: </b> ' + str(desired_count).encode() + b'<br><br>')
-        self.wfile.write(b'<b>Text arg: </b> ' + str(string_arg).encode() + b'<br><br>')
-        count = 1
-        while(count <= desired_count):
-            self.wfile.write(b"<b>" + str(count).encode() + b".</b> " + b"<b>Current time: </b>" + str(time.strftime("%X")).encode() + b"<br>")
-            time.sleep(interval)
-            count+=1
-        self.wfile.write(b"<br><b>End of loop.</b>")
-        self.wfile.write(b'</body></html>')
+            l_smysql='"mysql_connection":null'
+            if gb_mysqlcheck :
+                l_smysql='{"mysql_connection":'+str(gb_mysqlconnection)
+                if  gb_mysqlconnection :
+                    li_retcode=503
+            l_sredis='"redis_connection":null'
+            if  gb_redischeck :
+                l_sredis='"redis_connection":'+str(gb_redisconnection)
+                if gb_redisconnection :
+                    li_retcode=503
+            self.send_response(li_retcode)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            ls_tmp='{"query_number":'+ str(gi_readycheck_counter) +', "config_file":'+str(gb_configfile)+',"env_variables":'+str(gb_configenv)+','+l_smysql+','+l_sredis+'}'
+            READYCHECK_COUNTER.inc()
+            self.wfile.write(ls_tmp.encode())
+        case '/healthcheck':
+            l_tmp=RedisCheck()
+    #        print (str(l_tmp))
+            l_tmp=MysqlCheck()
+    #        print (str(l_tmp))
+            li_retcode=200
+            l_smysql='"mysql_connection":null'
+            if gb_mysqlcheck :
+                l_smysql='{"mysql_connection":'+str(gb_mysqlconnection)
+                if  gb_mysqlconnection :
+                    li_retcode=503
+            l_sredis='"redis_connection":null'
+            if  gb_redischeck :
+                l_sredis='"redis_connection":'+str(gb_redisconnection)
+                if gb_redisconnection :
+                    li_retcode=503
+            self.send_response(li_retcode)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            ls_tmp='{"query_number":'+ str(gi_healtcheck_counter) +','+l_smysql+','+l_sredis+'}'
+            HEALTHCHECK_COUNTER.inc()
+            self.wfile.write(ls_tmp.encode())
+        case '/about':
+            self.send_response(200)
+            self.send_header('Content-type','text/html')
+            self.end_headers()
+            self.wfile.write(b'<!doctype html><html><head><title>Test page</title><meta content="text/html; charset=utf-8" http-equiv="Content-Type"></head><body> ' + socket.gethostname().encode() + b'<br><br>')
+            self.wfile.write(b'<b>Hello from hostname:</b> ' + socket.gethostname().encode() + b'<br><br>')
+            self.wfile.write(b'<b>Interval: </b> ' + str(interval).encode() + b'<br><br>')
+            self.wfile.write(b'<b>Desired count of print: </b> ' + str(desired_count).encode() + b'<br><br>')
+            self.wfile.write(b'<b>Text arg: </b> ' + str(string_arg).encode() + b'<br><br>')
+            count = 1
+            while(count <= desired_count):
+                self.wfile.write(b"<b>" + str(count).encode() + b".</b> " + b"<b>Current time: </b>" + str(time.strftime("%X")).encode() + b"<br>")
+                time.sleep(interval)
+                count+=1
+            self.wfile.write(b"<br><b>End of loop.</b>")
+            self.wfile.write(b'</body></html>')
+        case "/metrics":
+            status = report_metrics(self)
+        case _:
+            start = time.time()  # Начало замера времени
+            try:
+                self.send_response(200)
+                self.send_header('Content-type','text/html')
+                self.end_headers()
+                self.wfile.write(b'<!doctype html><html><head><title>Test page</title><meta content="text/html; charset=utf-8" http-equiv="Content-Type"></head><body> ' + socket.gethostname().encode() + b'<br><br>')
+                self.wfile.write(b"Hello, World!")
+                self.wfile.write(b'</body></html>')
+                status = 200
+            except Exception as e:
+                self.send_response(500)
+                exception = str(type(e).__name__)  # Устанавливаем тип исключения
+                outcome = "FAILURE"
+                status = 500
+            finally:
+                # Замер времени и запись в гистограмму с дополнительными метками
+                duration = time.time() - start
+                REQUEST_TIME.labels(method="GET",endpoint=endpoint,status=str(status),exception=exception,outcome=outcome).observe(duration)
 
 # Новый обработчик для /metrics на порту 9100
-class MetricsHTTPRequestHandler(BaseHTTPRequestHandler):
-  def do_GET(self):
-    global gi_metrics_counter
-    global gi_healtcheck_counter
-    global gi_readycheck_counter
-    if self.path == '/metrics':
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.end_headers()
-        current_unix_time_millis = int(time.time() * 1000)
-        # Возвращаем текстовые метрики
-        lsb_ending= b' ' + str(current_unix_time_millis).encode() + b'\n'
-        self.wfile.write(b'# HELP n0whereman_test_pod_param_int Test pod param int\n')
-        self.wfile.write(b'# TYPE n0whereman_test_pod_param_int gauge\n')
-        self.wfile.write(b'n0whereman_test_pod_param_int ' + str(random.randint(1, 100)).encode() + lsb_ending )
-
-        self.wfile.write(b'# HELP n0whereman_test_pod_param_float Test pod param float\n')
-        self.wfile.write(b'# TYPE n0whereman_test_pod_param_float gauge\n')
-        self.wfile.write(b'n0whereman_test_pod_param_float ' + str(random.uniform(-500, +500)).encode() + lsb_ending )
-
-        self.wfile.write(b'# HELP n0whereman_test_pod_redis_check Test pod Redis check (0 for false, 1 for true)\n')
-        self.wfile.write(b'# TYPE n0whereman_test_pod_redis_check gauge\n')
-        self.wfile.write(b'n0whereman_test_pod_redis_check ' + str(int(gb_redisconnection)).encode() + lsb_ending )
-
-        self.wfile.write(b'# HELP n0whereman_test_pod_mysql_check Test pod MySQL check (0 for false, 1 for true)\n')
-        self.wfile.write(b'# TYPE n0whereman_test_pod_mysql_check gauge\n')
-        self.wfile.write(b'n0whereman_test_pod_mysql_check ' + str(int(gb_mysqlconnection)).encode() + lsb_ending )
-
-        self.wfile.write(b'# HELP n0whereman_test_pod_current_time Test pod current time in Unix format\n')
-        self.wfile.write(b'# TYPE n0whereman_test_pod_current_time gauge\n')
-        self.wfile.write(b'n0whereman_test_pod_current_time ' + str(current_unix_time_millis).encode() + lsb_ending )
-
-        self.wfile.write(b'# HELP n0whereman_test_pod_metrics_counter Total number of metrics processed by the pod\n')
-        self.wfile.write(b'# TYPE n0whereman_test_pod_metrics_counter counter\n')
-        self.wfile.write(b'n0whereman_test_pod_metrics_counter ' + str(gi_metrics_counter).encode() + lsb_ending )
-
-        self.wfile.write(b'# HELP n0whereman_test_pod_healtcheck_counter Total number of health checks performed by the pod\n')
-        self.wfile.write(b'# TYPE n0whereman_test_pod_healtcheck_counter counter\n')
-        self.wfile.write(b'n0whereman_test_pod_healtcheck_counter ' + str(gi_healtcheck_counter).encode() + lsb_ending )
-
-        self.wfile.write(b'# HELP n0whereman_test_pod_readycheck_counter Total number of ready checks performed by the pod\n')
-        self.wfile.write(b'# TYPE n0whereman_test_pod_readycheck_counter counter\n')
-        self.wfile.write(b'n0whereman_test_pod_readycheck_counter ' + str(gi_readycheck_counter).encode() + lsb_ending )
-
-        gi_metrics_counter=gi_metrics_counter+1
-    else:
-        self.send_response(200)
-        self.send_header('Content-type','text/html')
-        self.end_headers()
-        self.wfile.write(b'<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">')
-        self.wfile.write(b'<title>Node Exporter</title><style>body {font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,Noto Sans,Liberation Sans,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji;margin: 0;}')
-        self.wfile.write(b'header {background-color: #e6522c;color: #fff;font-size: 1rem;padding: 1rem;}main {padding: 1rem;}label {display: inline-block;width: 0.5em;}</style></head>')
-        self.wfile.write(b'<body><header><h1>Node Exporter</h1></header><main><h2>Prometheus Node Exporter</h2><div>Version: (1.0)</div><div><ul><li>')
-        self.wfile.write(b'<a href="/metrics">Metrics</a></li></ul></div></main></body></html>')
+def report_metrics(self):
+    from prometheus_client import generate_latest
+    current_unix_time_millis = int(time.time() * 1000)
+    TEST_POD_PARAM_INT.set(random.randint(1, 100))
+    TEST_POD_PARAM_FLOAT.set(random.uniform(-500, 500))
+    TEST_POD_REDIS_CHECK.set(int(gb_redisconnection))
+    TEST_POD_MYSQL_CHECK.set(int(gb_mysqlconnection))
+    TEST_POD_CURRENT_TIME.set(current_unix_time_millis)
+ 
+    status = 200
+    self.send_response(status)
+    self.send_header("Content-Type", "text/plain; version=0.0.4")
+    self.end_headers()
+    self.wfile.write(generate_latest())
+    METRICS_COUNTER.inc()
+    return status
 
 # Функция для запуска HTTP-сервера на порту 8000
 def run_main_server():
@@ -245,12 +274,6 @@ def run_main_server():
     print('Listening on port %s ...; gs_web_redis_host "%s" ; gs_web_mysql_host "%s" ; ' % (gi_server_port , gs_web_redis_host , gs_web_mysql_host))
     httpd.serve_forever()
 
-# Функция для запуска HTTP-сервера на порту 9100 для метрик
-def run_metrics_server():
-    global gi_metrics_port
-    metrics_httpd = HTTPServer(('0.0.0.0', gi_metrics_port), MetricsHTTPRequestHandler)
-    print(f'Listening on port {gi_metrics_port} for /metrics ...')
-    metrics_httpd.serve_forever()
 
 if __name__ == '__main__':
     interval = int(sys.argv[1])
@@ -258,7 +281,7 @@ if __name__ == '__main__':
     string_arg = sys.argv[3]
 
     gi_server_port          = 8000
-    gi_metrics_port         = 9100  # Новый порт для метрик
+    gi_metrics_port         = 9100  # Порт для метрик
 
     gi_web_mysql_port       = -1
     gs_web_mysql_username   = ""
@@ -343,16 +366,17 @@ if __name__ == '__main__':
             print("Mysql Error connection:", err)
             gb_mysqlconnection = False
 
-    # Создаем и запускаем два потока для каждого сервера
+    #запускаем метрики
+    # Функция для запуска HTTP-сервера на порту 9100 для метрик
+    start_http_server(gi_metrics_port)
+    print(f'Listening on port {gi_metrics_port} for /metrics ...')
 
-    thread1 = threading.Thread(target=run_main_server)
-    thread2 = threading.Thread(target=run_metrics_server)
+    # Создаем поток для главного сервера
+    main_thread = threading.Thread(target=run_main_server)
 
-    # Запускаем оба потока
-    thread1.start()
-    thread2.start()
+    # Запускаем потоки
+    main_thread.start()
 
     # Ожидаем завершения потоков
-    thread1.join()
-    thread2.join()
+    main_thread.join()
 #EOF
