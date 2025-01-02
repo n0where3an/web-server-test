@@ -9,12 +9,23 @@ metadata:
   name: n0wm-ws-test
   labels:
     pod-security.kubernetes.io/enforce: restricted
-
+#---
+#apiVersion: v1
+#kind: ResourceQuota
+#metadata:
+#  name: n0wm-test-resource-quota
+#  namespace: n0wm-ws-test  # Укажите целевой namespace
+#spec:
+#  hard:
+#    requests.cpu: "1"        # Максимум 1 CPU запрошено подами
+#    requests.memory: "30Mi"   # Максимум 1 GiB памяти запрошено подами
+#    limits.cpu: "1"          # Максимум 2 CPU может быть использовано
+#    limits.memory: "120Mi"     # Максимум 2 GiB памяти может быть использовано
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: n0wm-ws-test
+  name: n0wm-ws-test-deployment
   namespace: n0wm-ws-test
   labels:
     env: test
@@ -48,6 +59,13 @@ spec:
               - ALL
           seccompProfile:
             type: RuntimeDefault
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "50m"
+          requests:
+            memory: "64Mi"
+            cpu: "10m"
         env:
         - name: SERVER_PORT
           value: "8000"
@@ -111,9 +129,9 @@ metadata:
     project: n0wm-test-prj
 spec:
   scaleTargetRef:
-    apiVersion: apps/v1
+    apiVersion: apps/v2
     kind: Deployment
-    name: n0wm-ws-test
+    name: n0wm-ws-test-deployment
   minReplicas: 1
   maxReplicas: 3
   metrics:
@@ -150,5 +168,5 @@ spec:
   ports:
     - name: app-listener
       protocol: TCP
-      port: 80
+      port: 8000
       targetPort: 8000
