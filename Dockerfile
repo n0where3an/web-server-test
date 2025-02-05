@@ -12,7 +12,7 @@ EXPOSE 8000
 ENTRYPOINT ["python3","-u", "server.py"]
 
 COPY requirements_server.txt ./requirements_server.txt
-RUN apt update && apt install curl net-tools
+RUN apt update && apt install -y curl net-tools && apt clean
 RUN python -m pip install -U pip && \
     python -m pip install -r ./requirements_server.txt && \
     python -m pip cache purge
