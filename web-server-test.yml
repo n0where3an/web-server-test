@@ -233,6 +233,14 @@ spec:
     ports:
     - port: 8000
       protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          project: n0wm-test-prj
+    ports:
+    - protocol: TCP
+      port: 8000
+
   egress:
   - to:
     - podSelector:
