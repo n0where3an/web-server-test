@@ -48,7 +48,7 @@ spec:
     spec:
       containers:
       - name: n0wm-test-prj-web
-        image: n0where3an/testdocker:1.6
+        image: n0where3an/testdocker:1.7
         securityContext:
           runAsUser: 1009
           runAsGroup: 1009
@@ -170,3 +170,32 @@ spec:
       protocol: TCP
       port: 8000
       targetPort: 8000
+---
+#Warning!!! It configured for nginx ingress controller
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: n0wm-ws-test
+  namespace: n0wm-ws-test
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    ingress.kubernetes.io/rewrite-target: "/"
+    certmanager.k8s.io/cluster-issuer: monitoring-issuer
+spec:
+  ingressClassName: nginx
+#  tls:
+#    - hosts:
+#        - n0wm-ws-test.local
+#      secretName: n0wm-ws-test-tls
+  rules:
+    - host: "n0wm-ws-test.local"
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: n0wm-test-deployment-autoscaling
+                port:
+                  number: 8000
+#EOF
