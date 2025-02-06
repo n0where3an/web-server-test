@@ -218,7 +218,6 @@ metadata:
 spec:
   policyTypes:
   - Ingress
-  - Egress
   podSelector:
     matchLabels:
       project:  n0wm-test-prj
@@ -233,32 +232,5 @@ spec:
     ports:
     - port: 8000
       protocol: TCP
-  - from:
-    - podSelector:
-        matchLabels:
-          project: n0wm-test-prj
-    ports:
-    - protocol: TCP
-      port: 8000
 
-  egress:
-  - to:
-    - podSelector:
-        matchLabels:
-          project: n0wm-test-prj
-    ports:
-    - port: 8000
-      protocol: TCP
-  - ports:
-    - port: 53
-      protocol: TCP
-    - port: 53
-      protocol: UDP
-    - port: 80
-      protocol: TCP
-    - port: 443
-      protocol: TCP
-    to:
-    - ipBlock:
-        cidr: 0.0.0.0/0
 #EOF
