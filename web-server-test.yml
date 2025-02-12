@@ -188,7 +188,7 @@ spec:
 #        - n0wm-ws-test.local
 #      secretName: n0wm-ws-test-tls
   rules:
-    - host: "n0wm-ws-test.local"
+    - host: "n0wm-ws-test.local.net"
       http:
         paths:
           - pathType: Prefix
